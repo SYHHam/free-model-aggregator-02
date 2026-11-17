@@ -799,8 +799,12 @@ async function dialWithFailover(body: Json, needs: Needs): Promise<DialResult> {
     const text = await res.text().catch(() => '');
     failures.push({ status: res.status, code: codeFor(res.status, text), model: model.id });
     log(`dial ${model.id} refused HTTP ${res.status}`);
-    if (res.status === 429) cooled.add(model.id);
-    if (res.status !== 429 && res.status < 500) break; // 4xx other than 429: the request itself is wrong
+    // A 429 cools the model down; a 403 is a per-model gate (e.g. a free
+    // model restricted to agentic harnesses), so it cools too: the gate
+    // will not lift within the trial. Other 4xx mean the request itself
+    // is wrong, so there is nothing a different model could do.
+    if (res.status === 429 || res.status === 403) cooled.add(model.id);
+    if (res.status !== 429 && res.status !== 403 && res.status < 500) break;
   }
   return { ok: false, model: null, response: null, failures };
 }
